@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<!--
+ * Acople Orbital
+ * Creado por Yosuf Telusic
+ * © 2026 Yosuf Telusic
+-->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="author" content="Yosuf Telusic">
+<title>Acople Orbital — Creado por Yosuf Telusic</title>
+<style>
+  :root{
+    --cian:#4fd8ff;
+    --ambar:#ffb347;
+    --fondo:#05070a;
+    --rojo:#ff4d4d;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; width:100%; height:100%;
+    background:var(--fondo); color:#e8f6ff;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    overflow:hidden; user-select:none;
+  }
+  canvas#game-canvas{ position:fixed; inset:0; display:block; width:100%; height:100%; }
+
+  .hidden{ display:none !important; }
+
+  .panel-overlay{
+    position:fixed; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:18px;
+    background:radial-gradient(ellipse at center, rgba(10,20,30,0.92), rgba(2,4,8,0.98));
+    z-index:20; text-align:center; padding:20px;
+  }
+  .panel-overlay h1{
+    font-size:2.6em; margin:0; letter-spacing:4px; color:var(--cian);
+    text-shadow:0 0 18px rgba(79,216,255,0.6);
+  }
+  .panel-overlay p{ max-width:560px; line-height:1.5; color:#bcd6e6; }
+  .btn{
+    background:transparent; border:2px solid var(--cian); color:var(--cian);
+    padding:12px 28px; font-size:1.05em; letter-spacing:2px; cursor:pointer;
+    border-radius:4px; transition:all .15s ease; text-transform:uppercase;
+  }
+  .btn:hover{ background:var(--cian); color:#001018; }
+  .btn.secundario{ border-color:var(--ambar); color:var(--ambar); }
+  .btn.secundario:hover{ background:var(--ambar); color:#001018; }
+  .fila-botones{ display:flex; gap:14px; flex-wrap:wrap; justify-content:center; }
+  .creditos-texto{ margin-top:6px; color:#7fa; font-size:0.95em; letter-spacing:1px; }
+
+  /* ===== HUD ===== */
+  #hud{ position:fixed; inset:0; z-index:10; pointer-events:none; font-size:14px; }
+  #crosshair{
+    position:absolute; top:50%; left:50%; width:22px; height:22px;
+    transform:translate(-50%,-50%); border:2px solid rgba(79,216,255,0.85);
+    border-radius:50%;
+  }
+  #crosshair::after{
+    content:''; position:absolute; top:50%; left:50%; width:3px; height:3px;
+    background:var(--cian); border-radius:50%; transform:translate(-50%,-50%);
+  }
+  .hud-box{
+    position:absolute; background:rgba(5,10,16,0.55); border:1px solid rgba(79,216,255,0.35);
+    border-radius:6px; padding:10px 14px; backdrop-filter: blur(2px);
+  }
+  #panel-salud{ top:16px; left:16px; min-width:180px; }
+  #panel-estacion{ top:16px; right:16px; min-width:170px; text-align:right; }
+  #panel-dock{ bottom:16px; left:50%; transform:translateX(-50%); min-width:320px; text-align:center; }
+  .barra-fondo{ width:100%; height:8px; background:rgba(255,255,255,0.12); border-radius:4px; overflow:hidden; margin-top:4px; }
+  .barra-relleno{ height:100%; width:0%; background:var(--cian); transition:width .08s linear; }
+  .barra-relleno.rojo{ background:var(--rojo); }
+  .barra-relleno.ambar{ background:var(--ambar); }
+  #mensaje-central{
+    position:absolute; top:40%; left:50%; transform:translate(-50%,-50%);
+    font-size:1.6em; letter-spacing:3px; color:var(--cian);
+    text-shadow:0 0 14px rgba(79,216,255,0.7); opacity:0; transition:opacity .3s ease;
+  }
+  #vignette{
+    position:fixed; inset:0; z-index:15; pointer-events:none;
+    box-shadow: inset 0 0 0 0 rgba(255,0,0,0); transition: box-shadow .25s ease;
+  }
+  #pause-overlay{ z-index:25; }
+  #etiqueta-controles{ position:absolute; bottom:16px; right:16px; font-size:12px; color:#8bb; text-align:right; line-height:1.5; }
+</style>
+</head>
+<body>
+
+  <!-- PANTALLA DE TITULO -->
+  <div id="title-screen" class="panel-overlay">
+    <h1>ACOPLE ORBITAL</h1>
+    <p>Pilota tu nave en primera persona, alinéate con los puertos de las estaciones y acopla con suavidad
+       mientras el ciclo de las estaciones del año cambia el espacio a tu alrededor. Esquiva el tráfico y los
+       asteroides: cada colisión daña tu casco.</p>
+    <div class="fila-botones">
+      <button class="btn" id="btn-jugar">Jugar</button>
+      <button class="btn secundario" id="btn-creditos">Créditos</button>
+    </div>
+    <p class="creditos-texto">Creado por Yosuf Telusic</p>
+  </div>
+
+  <!-- PANTALLA DE CREDITOS -->
+  <div id="credits-screen" class="panel-overlay hidden">
+    <h1 style="font-size:2em;">Créditos</h1>
+    <p><strong>Acople Orbital</strong><br>Creado por Yosuf Telusic<br>© 2026 Yosuf Telusic</p>
+    <p>Motor: Three.js (renderizado 3D en el navegador). Arte y audio generados por código.</p>
+    <div class="fila-botones">
+      <button class="btn" id="btn-volver">Volver</button>
+    </div>
+  </div>
+
+  <!-- PANTALLA DE GAME OVER -->
+  <div id="gameover-screen" class="panel-overlay hidden">
+    <h1 style="color:var(--rojo); text-shadow:0 0 18px rgba(255,77,77,0.6);">CASCO DESTRUIDO</h1>
+    <p id="texto-gameover">Acoples conseguidos: 0 · Mejor marca: 0</p>
+    <div class="fila-botones">
+      <button class="btn" id="btn-reintentar">Reintentar</button>
+      <button class="btn secundario" id="btn-menu">Menú</button>
+    </div>
+    <p class="creditos-texto">Creado por Yosuf Telusic</p>
+  </div>
+
+  <!-- PAUSA -->
+  <div id="pause-overlay" class="panel-overlay hidden">
+    <h1 style="font-size:1.6em;">PAUSA</h1>
+    <p>Haz clic en la pantalla para continuar.</p>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div id="crosshair"></div>
+    <div id="vignette"></div>
+    <div id="mensaje-central"></div>
+
+    <div class="hud-box" id="panel-salud">
+      CASCO
+      <div class="barra-fondo"><div class="barra-relleno" id="barra-salud" style="width:100%"></div></div>
+      <div style="margin-top:8px;">ESTACIÓN DEL AÑO: <span id="texto-estacion-anio">Primavera</span></div>
+    </div>
+
+    <div class="hud-box" id="panel-estacion">
+      Acoples: <span id="texto-acoples">0</span> · Mejor: <span id="texto-mejor">0</span><br>
+      Destino: Estación <span id="texto-indice-estacion">1</span>/<span id="texto-total-estaciones">5</span>
+    </div>
+
+    <div class="hud-box" id="panel-dock">
+      <div>Distancia: <span id="texto-distancia">--</span> m · Velocidad: <span id="texto-velocidad">--</span> m/s</div>
+      <div class="barra-fondo"><div class="barra-relleno ambar" id="barra-alineacion" style="width:0%"></div></div>
+      <div style="margin-top:4px;">Acoplando...</div>
+      <div class="barra-fondo"><div class="barra-relleno" id="barra-progreso" style="width:0%"></div></div>
+    </div>
+
+    <div id="etiqueta-controles">
+      Ratón: orientar · WASD: empuje · Espacio/Shift: subir/bajar<br>
+      Q/E: alabeo · F: asistente (<span id="texto-asistente">ON</span>) · M: silenciar
+    </div>
+  </div>
+
+  <canvas id="game-canvas"></canvas>
+
+<script type="module">
+/*
+ * Acople Orbital
+ * Creado por Yosuf Telusic
+ * © 2026 Yosuf Telusic
+ */
+
+// Confianza MEDIA en la URL exacta de esta versión: si no carga, revisa
+// https://threejs.org/docs/ y ajusta el número de versión en esta línea.
+import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+
+console.log("Acople Orbital — Creado por Yosuf Telusic");
+
+/* ============================================================
+   CONFIGURACIÓN
+   ============================================================ */
+const CONFIG = {
+  SEED: 20260925,
+  THRUST: 16,
+  VERTICAL_THRUST: 11,
+  DAMPING: 0.9,            // fracción de velocidad eliminada por segundo con asistente ON
+  MAX_SPEED: 42,
+  MOUSE_SENSITIVITY: 0.0022,
+  ROLL_SPEED: 1.7,
+  DOCK_RANGE: 10,
+  DOCK_ALIGN_MIN: 0.90,
+  DOCK_MAX_SPEED: 3.2,
+  DOCK_HOLD_TIME: 1.3,
+  STATION_SPACING: 230,
+  NUM_STATIONS: 5,
+  NUM_TRAFFIC: 6,
+  NUM_DEBRIS: 14,
+  SEASON_EVERY_N_DOCKS: 2,
+  MAX_HEALTH: 100,
+  COLLISION_DAMAGE: 26,
+  HEALTH_REGEN: 2.5,
+  WORLD_RADIUS: 1500,
+  CORRIDOR_WIDTH: 140
+};
+
+const SEASONS = [
+  { nombre: "Primavera", cielo: 0x214a3a, luz: 0xbdf2c9, planeta: 0x3f8f5c, niebla: 0x0e2017 },
+  { nombre: "Verano",    cielo: 0x123b57, luz: 0xfff1b0, planeta: 0xd9a22b, niebla: 0x081826 },
+  { nombre: "Otoño",     cielo: 0x3a2412, luz: 0xffb270, planeta: 0xa5522a, niebla: 0x1a0f08 },
+  { nombre: "Invierno",  cielo: 0x18273a, luz: 0xcfe8ff, planeta: 0xd8e4ef, niebla: 0x0a131d }
+];
+
+/* ============================================================
+   RNG DETERMINISTA (mundo reproducible con semilla)
+   ============================================================ */
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const rng = mulberry32(CONFIG.SEED);
+
+/* ============================================================
+   MOTOR DE AUDIO (Web Audio API, síntesis propia)
+   ============================================================ */
+class AudioEngine {
+  constructor() {
+    this.ctx = null;
+    this.master = null;
+    this.engineGain = null;
+    this.engineOsc = null;
+    this.muted = false;
+  }
+  init() {
+    if (this.ctx) return;
+    try {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = 0.5;
+      this.master.connect(this.ctx.destination);
+
+      // Zumbido de motor continuo, modulado por el empuje
+      this.engineOsc = this.ctx.createOscillator();
+      this.engineOsc.type = "sawtooth";
+      this.engineOsc.frequency.value = 60;
+      this.engineGain = this.ctx.createGain();
+      this.engineGain.gain.value = 0.0;
+      this.engineOsc.connect(this.engineGain).connect(this.master);
+      this.engineOsc.start();
+
+      // Zumbido ambiental grave
+      const drone = this.ctx.createOscillator();
+      drone.type = "sine";
+      drone.frequency.value = 40;
+      const droneGain = this.ctx.createGain();
+      droneGain.gain.value = 0.04;
+      drone.connect(droneGain).connect(this.master);
+      drone.start();
+    } catch (e) {
+      console.warn("No se pudo iniciar el audio:", e);
+    }
+  }
+  setThrottle(mag01) {
+    if (!this.engineGain) return;
+    const g = Math.min(1, mag01) * 0.12;
+    this.engineGain.gain.setTargetAtTime(g, this.ctx.currentTime, 0.08);
+    this.engineOsc.frequency.setTargetAtTime(55 + mag01 * 90, this.ctx.currentTime, 0.1);
+  }
+  playDockSuccess() {
+    if (!this.ctx) return;
+    const t0 = this.ctx.currentTime;
+    [523, 659, 784].forEach((freq, i) => {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = "sine"; o.frequency.value = freq;
+      g.gain.setValueAtTime(0, t0 + i * 0.12);
+      g.gain.linearRampToValueAtTime(0.25, t0 + i * 0.12 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + i * 0.12 + 0.3);
+      o.connect(g).connect(this.master);
+      o.start(t0 + i * 0.12);
+      o.stop(t0 + i * 0.12 + 0.32);
+    });
+  }
+  playCollision() {
+    if (!this.ctx) return;
+    const t0 = this.ctx.currentTime;
+    for (let i = 0; i < 2; i++) {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = "square"; o.frequency.value = 140;
+      g.gain.setValueAtTime(0.22, t0 + i * 0.18);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + i * 0.18 + 0.16);
+      o.connect(g).connect(this.master);
+      o.start(t0 + i * 0.18);
+      o.stop(t0 + i * 0.18 + 0.17);
+    }
+  }
+  setMuted(m) {
+    this.muted = m;
+    if (this.master) this.master.gain.value = m ? 0 : 0.5;
+  }
+}
+const audio = new AudioEngine();
+
+/* ============================================================
+   ESCENA THREE.JS
+   ============================================================ */
+const canvas = document.getElementById("game-canvas");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05070a);
+scene.fog = new THREE.Fog(0x05070a, 60, 1100);
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 3000);
+camera.position.set(0, 0, 30);
+
+const luzAmbiente = new THREE.AmbientLight(0x224455, 0.6);
+scene.add(luzAmbiente);
+const luzHemisferio = new THREE.HemisphereLight(0x335577, 0x111122, 0.5);
+scene.add(luzHemisferio);
+const luzSol = new THREE.DirectionalLight(0xffffff, 1.1);
+luzSol.position.set(300, 400, 200);
+scene.add(luzSol);
+
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+/* ============================================================
+   ESTRELLAS
+   ============================================================ */
+function crearEstrellas() {
+  const n = 1600;
+  const posiciones = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const r = 1300 + rng() * 500;
+    const theta = rng() * Math.PI * 2;
+    const phi = Math.acos(2 * rng() - 1);
+    posiciones[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+    posiciones[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+    posiciones[i * 3 + 2] = r * Math.cos(phi);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(posiciones, 3));
+  const mat = new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: true });
+  return new THREE.Points(geo, mat);
+}
+scene.add(crearEstrellas());
+
+/* ============================================================
+   PLANETA (fondo, cambia de color con la estación del año)
+   ============================================================ */
+function crearPlaneta() {
+  const grupo = new THREE.Group();
+  const geo = new THREE.IcosahedronGeometry(260, 2);
+  const mat = new THREE.MeshStandardMaterial({ color: SEASONS[0].planeta, flatShading: true, roughness: 1 });
+  const esfera = new THREE.Mesh(geo, mat);
+  grupo.add(esfera);
+
+  const geoAtm = new THREE.IcosahedronGeometry(272, 2);
+  const matAtm = new THREE.MeshBasicMaterial({
+    color: SEASONS[0].luz, transparent: true, opacity: 0.22,
+    side: THREE.BackSide, blending: THREE.AdditiveBlending
+  });
+  const atmosfera = new THREE.Mesh(geoAtm, matAtm);
+  grupo.add(atmosfera);
+
+  grupo.position.set(60, -420, -950);
+  grupo.userData = { esfera, atmosfera };
+  return grupo;
+}
+const planeta = crearPlaneta();
+scene.add(planeta);
+
+/* ============================================================
+   ESTACIONES ESPACIALES
+   ============================================================ */
+function crearEstacion(posicion) {
+  const grupo = new THREE.Group();
+  const matCasco = new THREE.MeshStandardMaterial({ color: 0x8fa3b0, flatShading: true, roughness: 0.6, metalness: 0.3 });
+  const matAcento = new THREE.MeshStandardMaterial({ color: 0x4fd8ff, flatShading: true, emissive: 0x114455, emissiveIntensity: 0.4 });
+
+  // Hub central (cilindro con eje en Z)
+  const hubGeo = new THREE.CylinderGeometry(6, 6, 22, 8);
+  hubGeo.rotateX(Math.PI / 2);
+  const hub = new THREE.Mesh(hubGeo, matCasco);
+  grupo.add(hub);
+
+  // Anillo giratorio
+  const anilloGeo = new THREE.TorusGeometry(17, 1.3, 6, 16);
+  const anillo = new THREE.Mesh(anilloGeo, matAcento);
+  grupo.add(anillo);
+
+  // Módulos alrededor del anillo
+  for (let i = 0; i < 4; i++) {
+    const ang = (i / 4) * Math.PI * 2;
+    const modGeo = new THREE.BoxGeometry(3, 3, 5);
+    const mod = new THREE.Mesh(modGeo, matCasco);
+    mod.position.set(Math.cos(ang) * 17, Math.sin(ang) * 17, 0);
+    grupo.add(mod);
+  }
+
+  // Paneles solares
+  for (const signo of [-1, 1]) {
+    const panelGeo = new THREE.BoxGeometry(2, 20, 8);
+    const panel = new THREE.Mesh(panelGeo, new THREE.MeshStandardMaterial({ color: 0x1c3a52, flatShading: true }));
+    panel.position.set(signo * 26, 0, 0);
+    grupo.add(panel);
+  }
+
+  // Puerto de acoplamiento (marcador + baliza visual pulsante)
+  const port = new THREE.Object3D();
+  port.position.set(0, 0, 13);
+  grupo.add(port);
+
+  const collarGeo = new THREE.TorusGeometry(3.2, 0.5, 6, 12);
+  const collar = new THREE.Mesh(collarGeo, matAcento);
+  port.add(collar);
+
+  const balizaGeo = new THREE.SphereGeometry(0.6, 8, 8);
+  const balizaMat = new THREE.MeshStandardMaterial({ color: 0xffb347, emissive: 0xffb347, emissiveIntensity: 1 });
+  const baliza = new THREE.Mesh(balizaGeo, balizaMat);
+  baliza.position.set(0, 0, 0.5);
+  port.add(baliza);
+
+  // Orientación aleatoria (no afecta a la lógica de acoplamiento, solo estética)
+  grupo.rotation.set((rng() - 0.5) * 0.6, rng() * Math.PI * 2, (rng() - 0.5) * 0.6);
+  grupo.position.copy(posicion);
+
+  return { grupo, port, baliza, anillo, collisionRadius: 20 };
+}
+
+const estaciones = [];
+for (let i = 0; i < CONFIG.NUM_STATIONS; i++) {
+  const z = -(i + 1) * CONFIG.STATION_SPACING;
+  const pos = new THREE.Vector3(
+    (rng() - 0.5) * CONFIG.CORRIDOR_WIDTH,
+    (rng() - 0.5) * 60,
+    z
+  );
+  const est = crearEstacion(pos);
+  scene.add(est.grupo);
+  estaciones.push(est);
+}
+
+/* ============================================================
+   NAVES DE TRÁFICO
+   ============================================================ */
+function crearNave() {
+  const grupo = new THREE.Group();
+  const matCuerpo = new THREE.MeshStandardMaterial({ color: 0xaab6c2, flatShading: true });
+  const matMotor = new THREE.MeshStandardMaterial({ color: 0xff9955, emissive: 0xff5522, emissiveIntensity: 0.8 });
+
+  const conoGeo = new THREE.ConeGeometry(1.4, 4, 6);
+  conoGeo.rotateX(-Math.PI / 2); // apunta hacia -Z
+  const cono = new THREE.Mesh(conoGeo, matCuerpo);
+  grupo.add(cono);
+
+  for (const signo of [-1, 1]) {
+    const alaGeo = new THREE.BoxGeometry(2.6, 0.2, 1.4);
+    const ala = new THREE.Mesh(alaGeo, matCuerpo);
+    ala.position.set(signo * 1.6, 0, 0.8);
+    grupo.add(ala);
+  }
+
+  const motorGeo = new THREE.SphereGeometry(0.4, 6, 6);
+  const motor = new THREE.Mesh(motorGeo, matMotor);
+  motor.position.set(0, 0, 2.1);
+  grupo.add(motor);
+
+  return { grupo, collisionRadius: 3.5 };
+}
+
+const trafico = [];
+for (let i = 0; i < CONFIG.NUM_TRAFFIC; i++) {
+  const nave = crearNave();
+  const centro = new THREE.Vector3(
+    (rng() - 0.5) * CONFIG.CORRIDOR_WIDTH * 1.4,
+    (rng() - 0.5) * 80,
+    -rng() * (CONFIG.STATION_SPACING * CONFIG.NUM_STATIONS)
+  );
+  nave.centro = centro;
+  nave.radio = 18 + rng() * 30;
+  nave.velocidadAngular = (0.2 + rng() * 0.4) * (rng() < 0.5 ? -1 : 1);
+  nave.fase = rng() * Math.PI * 2;
+  nave.amplitudVertical = 4 + rng() * 10;
+  scene.add(nave.grupo);
+  trafico.push(nave);
+}
+
+/* ============================================================
+   ASTEROIDES / DEBRIS
+   ============================================================ */
+function crearAsteroide() {
+  const geo = new THREE.IcosahedronGeometry(1, 0);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const jitter = 0.25;
+    pos.setXYZ(
+      i,
+      pos.getX(i) + (rng() - 0.5) * jitter,
+      pos.getY(i) + (rng() - 0.5) * jitter,
+      pos.getZ(i) + (rng() - 0.5) * jitter
+    );
+  }
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x6b6f76, flatShading: true, roughness: 1 });
+  const mesh = new THREE.Mesh(geo, mat);
+  const escala = 2 + rng() * 5;
+  mesh.scale.setScalar(escala);
+  mesh.rotation.set(rng() * Math.PI, rng() * Math.PI, rng() * Math.PI);
+  return { mesh, collisionRadius: escala * 0.9 };
+}
+
+const asteroides = [];
+for (let i = 0; i < CONFIG.NUM_DEBRIS; i++) {
+  const ast = crearAsteroide();
+  ast.mesh.position.set(
+    (rng() - 0.5) * CONFIG.CORRIDOR_WIDTH * 1.6,
+    (rng() - 0.5) * 100,
+    -rng() * (CONFIG.STATION_SPACING * CONFIG.NUM_STATIONS)
+  );
+  scene.add(ast.mesh);
+  asteroides.push(ast);
+}
+
+/* ============================================================
+   ESTADO DEL JUEGO
+   ============================================================ */
+const state = {
+  modo: "titulo", // titulo | jugando | pausa | gameover
+  velocidad: new THREE.Vector3(0, 0, 0),
+  shipQuaternion: new THREE.Quaternion(),
+  asistente: true,
+  salud: CONFIG.MAX_HEALTH,
+  acoples: 0,
+  mejorMarca: Number(localStorage.getItem("acopleOrbital_mejorMarca") || 0),
+  indiceEstacion: 0,
+  progresoAcople: 0,
+  temporadaIndice: 0,
+  vueltas: 0,
+  mensajeTimer: 0
+};
+
+// Colores de transición de estación del año
+const transicion = {
+  activa: false, t: 0, duracion: 2.5,
+  desde: {}, hasta: {}
+};
+function aplicarTemporadaInmediata(idx) {
+  const s = SEASONS[idx];
+  scene.fog.color.setHex(s.niebla);
+  scene.background.setHex(s.cielo);
+  luzSol.color.setHex(s.luz);
+  luzHemisferio.color.setHex(s.luz);
+  planeta.userData.esfera.material.color.setHex(s.planeta);
+  planeta.userData.atmosfera.material.color.setHex(s.luz);
+}
+function iniciarTransicionTemporada(nuevoIdx) {
+  const sDesde = SEASONS[state.temporadaIndice];
+  const sHasta = SEASONS[nuevoIdx];
+  transicion.desde = {
+    niebla: new THREE.Color(sDesde.niebla), cielo: new THREE.Color(sDesde.cielo),
+    luz: new THREE.Color(sDesde.luz), planeta: new THREE.Color(sDesde.planeta)
+  };
+  transicion.hasta = {
+    niebla: new THREE.Color(sHasta.niebla), cielo: new THREE.Color(sHasta.cielo),
+    luz: new THREE.Color(sHasta.luz), planeta: new THREE.Color(sHasta.planeta)
+  };
+  transicion.t = 0;
+  transicion.activa = true;
+  state.temporadaIndice = nuevoIdx;
+}
+function actualizarTransicion(dt) {
+  if (!transicion.activa) return;
+  transicion.t += dt / transicion.duracion;
+  const k = Math.min(1, transicion.t);
+  scene.fog.color.copy(transicion.desde.niebla).lerp(transicion.hasta.niebla, k);
+  scene.background.copy(transicion.desde.cielo).lerp(transicion.hasta.cielo, k);
+  luzSol.color.copy(transicion.desde.luz).lerp(transicion.hasta.luz, k);
+  luzHemisferio.color.copy(transicion.desde.luz).lerp(transicion.hasta.luz, k);
+  planeta.userData.esfera.material.color.copy(transicion.desde.planeta).lerp(transicion.hasta.planeta, k);
+  planeta.userData.atmosfera.material.color.copy(transicion.desde.luz).lerp(transicion.hasta.luz, k);
+  if (k >= 1) transicion.activa = false;
+}
+aplicarTemporadaInmediata(0);
+
+/* ============================================================
+   ENTRADA: TECLADO Y RATÓN
+   ============================================================ */
+const teclas = {};
+window.addEventListener("keydown", (e) => {
+  teclas[e.code] = true;
+  if (e.code === "KeyF" && state.modo === "jugando") {
+    state.asistente = !state.asistente;
+    document.getElementById("texto-asistente").textContent = state.asistente ? "ON" : "OFF";
+  }
+  if (e.code === "KeyM") {
+    audio.setMuted(!audio.muted);
+  }
+});
+window.addEventListener("keyup", (e) => { teclas[e.code] = false; });
+
+const mouseDelta = new THREE.Vector2(0, 0);
+document.addEventListener("mousemove", (e) => {
+  if (document.pointerLockElement === canvas) {
+    mouseDelta.x += e.movementX || 0;
+    mouseDelta.y += e.movementY || 0;
+  }
+});
+
+canvas.addEventListener("click", () => {
+  if (state.modo === "jugando" || state.modo === "pausa") {
+    canvas.requestPointerLock();
+  }
+});
+document.addEventListener("pointerlockchange", () => {
+  if (document.pointerLockElement !== canvas && state.modo === "jugando") {
+    state.modo = "pausa";
+    document.getElementById("pause-overlay").classList.remove("hidden");
+  } else if (document.pointerLockElement === canvas && state.modo === "pausa") {
+    state.modo = "jugando";
+    document.getElementById("pause-overlay").classList.add("hidden");
+  }
+});
+
+/* ============================================================
+   MENSAJES CENTRALES DEL HUD
+   ============================================================ */
+function mostrarMensaje(texto, duracion = 1.6) {
+  const el = document.getElementById("mensaje-central");
+  el.textContent = texto;
+  el.style.opacity = "1";
+  state.mensajeTimer = duracion;
+}
+
+/* ============================================================
+   COLISIONES Y DAÑO
+   ============================================================ */
+function flashVignette() {
+  const v = document.getElementById("vignette");
+  v.style.boxShadow = "inset 0 0 160px 40px rgba(255,0,0,0.65)";
+  setTimeout(() => { v.style.boxShadow = "inset 0 0 0 0 rgba(255,0,0,0)"; }, 220);
+}
+function recibirDanio(cantidad) {
+  state.salud = Math.max(0, state.salud - cantidad);
+  audio.playCollision();
+  flashVignette();
+  if (state.salud <= 0 && state.modo === "jugando") {
+    terminarPartida();
+  }
+}
+
+/* ============================================================
+   ACOPLAMIENTO
+   ============================================================ */
+function completarAcople() {
+  state.acoples++;
+  mostrarMensaje("ACOPLADO ✓");
+  audio.playDockSuccess();
+
+  if (state.acoples % CONFIG.SEASON_EVERY_N_DOCKS === 0) {
+    const siguiente = (state.temporadaIndice + 1) % SEASONS.length;
+    iniciarTransicionTemporada(siguiente);
+  }
+
+  state.indiceEstacion = (state.indiceEstacion + 1) % CONFIG.NUM_STATIONS;
+  if (state.indiceEstacion === 0) state.vueltas++;
+  state.progresoAcople = 0;
+}
+
+function actualizarAcoplamiento(dt) {
+  const est = estaciones[state.indiceEstacion];
+  const portPos = new THREE.Vector3();
+  est.port.getWorldPosition(portPos);
+
+  const haciaPuerto = portPos.clone().sub(camera.position);
+  const distancia = haciaPuerto.length();
+  const direccionNave = new THREE.Vector3(0, 0, -1).applyQuaternion(state.shipQuaternion);
+  const alineacion = distancia > 0.001 ? direccionNave.dot(haciaPuerto.clone().normalize()) : 0;
+  const velocidadMag = state.velocidad.length();
+
+  document.getElementById("texto-distancia").textContent = distancia.toFixed(1);
+  document.getElementById("texto-velocidad").textContent = velocidadMag.toFixed(1);
+  document.getElementById("barra-alineacion").style.width = `${Math.max(0, alineacion * 100)}%`;
+
+  const dentroDeRango = distancia < CONFIG.DOCK_RANGE &&
+                         alineacion > CONFIG.DOCK_ALIGN_MIN &&
+                         velocidadMag < CONFIG.DOCK_MAX_SPEED;
+
+  if (dentroDeRango) {
+    state.progresoAcople += dt;
+    if (state.progresoAcople >= CONFIG.DOCK_HOLD_TIME) {
+      completarAcople();
+    }
+  } else {
+    state.progresoAcople = Math.max(0, state.progresoAcople - dt * 2);
+  }
+  document.getElementById("barra-progreso").style.width =
+    `${Math.min(100, (state.progresoAcople / CONFIG.DOCK_HOLD_TIME) * 100)}%`;
+}
+
+/* ============================================================
+   MOVIMIENTO DE LA NAVE DEL JUGADOR
+   ============================================================ */
+function actualizarRotacion(dt) {
+  const pitch = -mouseDelta.y * CONFIG.MOUSE_SENSITIVITY;
+  const yaw = -mouseDelta.x * CONFIG.MOUSE_SENSITIVITY;
+  let roll = 0;
+  if (teclas["KeyQ"]) roll += CONFIG.ROLL_SPEED * dt;
+  if (teclas["KeyE"]) roll -= CONFIG.ROLL_SPEED * dt;
+
+  const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), pitch);
+  const qYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+  const qRoll = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), roll);
+
+  state.shipQuaternion.multiply(qYaw).multiply(qPitch).multiply(qRoll).normalize();
+  camera.quaternion.copy(state.shipQuaternion);
+
+  mouseDelta.set(0, 0);
+}
+
+function actualizarMovimiento(dt) {
+  const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(state.shipQuaternion);
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(state.shipQuaternion);
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(state.shipQuaternion);
+
+  const empuje = new THREE.Vector3();
+  let magnitudEmpuje = 0;
+  if (teclas["KeyW"]) { empuje.add(forward); magnitudEmpuje = 1; }
+  if (teclas["KeyS"]) { empuje.sub(forward); magnitudEmpuje = 1; }
+  if (teclas["KeyA"]) { empuje.sub(right); magnitudEmpuje = 1; }
+  if (teclas["KeyD"]) { empuje.add(right); magnitudEmpuje = 1; }
+  if (teclas["Space"]) { empuje.add(up); magnitudEmpuje = 1; }
+  if (teclas["ShiftLeft"] || teclas["ShiftRight"]) { empuje.sub(up); magnitudEmpuje = 1; }
+
+  if (empuje.lengthSq() > 0) empuje.normalize().multiplyScalar(CONFIG.THRUST * dt);
+  state.velocidad.add(empuje);
+
+  if (state.asistente) {
+    const factor = Math.pow(1 - CONFIG.DAMPING * 0.5, dt * 10);
+    state.velocidad.multiplyScalar(Math.max(0, Math.min(1, factor)));
+  }
+
+  if (state.velocidad.length() > CONFIG.MAX_SPEED) {
+    state.velocidad.setLength(CONFIG.MAX_SPEED);
+  }
+
+  camera.position.add(state.velocidad.clone().multiplyScalar(dt));
+  audio.setThrottle(magnitudEmpuje);
+
+  // Límite suave del mundo
+  const dist = camera.position.length();
+  if (dist > CONFIG.WORLD_RADIUS) {
+    const correccion = camera.position.clone().normalize().multiplyScalar(-6 * dt);
+    state.velocidad.add(correccion);
+  }
+}
+
+/* ============================================================
+   ACTUALIZACIÓN DE NAVES DE TRÁFICO Y COLISIONES
+   ============================================================ */
+function actualizarTrafico(dt, t) {
+  const multiplicadorVelocidad = 1 + state.vueltas * 0.12;
+  for (const nave of trafico) {
+    const angulo = t * nave.velocidadAngular * multiplicadorVelocidad + nave.fase;
+    const x = nave.centro.x + Math.cos(angulo) * nave.radio;
+    const z = nave.centro.z + Math.sin(angulo) * nave.radio;
+    const y = nave.centro.y + Math.sin(angulo * 0.6) * nave.amplitudVertical;
+    const nuevaPos = new THREE.Vector3(x, y, z);
+
+    const direccion = nuevaPos.clone().sub(nave.grupo.position);
+    if (direccion.lengthSq() > 0.0001) {
+      const objetivo = new THREE.Quaternion().setFromUnitVectors(
+        new THREE.Vector3(0, 0, -1), direccion.clone().normalize()
+      );
+      nave.grupo.quaternion.slerp(objetivo, 0.1);
+    }
+    nave.grupo.position.copy(nuevaPos);
+
+    const distJugador = camera.position.distanceTo(nave.grupo.position);
+    if (distJugador < (nave.collisionRadius + 1.5)) {
+      recibirDanio(CONFIG.COLLISION_DAMAGE);
+      const empujar = camera.position.clone().sub(nave.grupo.position).normalize().multiplyScalar(14);
+      state.velocidad.add(empujar);
+    }
+  }
+
+  for (const ast of asteroides) {
+    const distJugador = camera.position.distanceTo(ast.mesh.position);
+    if (distJugador < (ast.collisionRadius + 1.5)) {
+      recibirDanio(CONFIG.COLLISION_DAMAGE * 0.8);
+      const empujar = camera.position.clone().sub(ast.mesh.position).normalize().multiplyScalar(12);
+      state.velocidad.add(empujar);
+    }
+  }
+}
+
+/* ============================================================
+   ANIMACIÓN DE ESTACIONES (anillo girando, baliza pulsante)
+   ============================================================ */
+function actualizarEstaciones(dt, t) {
+  for (const est of estaciones) {
+    est.anillo.rotation.z += dt * 0.3;
+    const intensidad = 0.6 + Math.sin(t * 3) * 0.5;
+    est.baliza.material.emissiveIntensity = Math.max(0.2, intensidad);
+  }
+  planeta.rotation.y += dt * 0.02;
+}
+
+/* ============================================================
+   HUD
+   ============================================================ */
+function actualizarHUD(dt) {
+  document.getElementById("barra-salud").style.width = `${state.salud}%`;
+  const barraSalud = document.getElementById("barra-salud");
+  barraSalud.className = "barra-relleno" + (state.salud < 35 ? " rojo" : "");
+  document.getElementById("texto-estacion-anio").textContent = SEASONS[state.temporadaIndice].nombre;
+  document.getElementById("texto-acoples").textContent = state.acoples;
+  document.getElementById("texto-mejor").textContent = state.mejorMarca;
+  document.getElementById("texto-indice-estacion").textContent = state.indiceEstacion + 1;
+  document.getElementById("texto-total-estaciones").textContent = CONFIG.NUM_STATIONS;
+
+  if (state.mensajeTimer > 0) {
+    state.mensajeTimer -= dt;
+    if (state.mensajeTimer <= 0) {
+      document.getElementById("mensaje-central").style.opacity = "0";
+    }
+  }
+
+  // Regeneración lenta de casco
+  if (state.salud < CONFIG.MAX_HEALTH) {
+    state.salud = Math.min(CONFIG.MAX_HEALTH, state.salud + CONFIG.HEALTH_REGEN * dt);
+  }
+}
+
+/* ============================================================
+   CICLO DE VIDA DE LA PARTIDA
+   ============================================================ */
+function iniciarPartida() {
+  state.modo = "jugando";
+  state.salud = CONFIG.MAX_HEALTH;
+  state.acoples = 0;
+  state.indiceEstacion = 0;
+  state.progresoAcople = 0;
+  state.vueltas = 0;
+  state.velocidad.set(0, 0, 0);
+  state.shipQuaternion.identity();
+  camera.position.set(0, 0, 30);
+  camera.quaternion.identity();
+  aplicarTemporadaInmediata(0);
+  state.temporadaIndice = 0;
+
+  document.getElementById("title-screen").classList.add("hidden");
+  document.getElementById("gameover-screen").classList.add("hidden");
+  document.getElementById("hud").classList.remove("hidden");
+
+  audio.init();
+  canvas.requestPointerLock();
+}
+
+function terminarPartida() {
+  state.modo = "gameover";
+  if (state.acoples > state.mejorMarca) {
+    state.mejorMarca = state.acoples;
+    try { localStorage.setItem("acopleOrbital_mejorMarca", String(state.mejorMarca)); }
+    catch (e) { console.warn("No se pudo guardar la mejor marca:", e); }
+  }
+  document.getElementById("texto-gameover").textContent =
+    `Acoples conseguidos: ${state.acoples} · Mejor marca: ${state.mejorMarca}`;
+  document.getElementById("hud").classList.add("hidden");
+  document.getElementById("gameover-screen").classList.remove("hidden");
+  if (document.pointerLockElement === canvas) document.exitPointerLock();
+}
+
+/* ============================================================
+   BOTONES DE INTERFAZ
+   ============================================================ */
+document.getElementById("btn-jugar").addEventListener("click", iniciarPartida);
+document.getElementById("btn-reintentar").addEventListener("click", iniciarPartida);
+document.getElementById("btn-menu").addEventListener("click", () => {
+  document.getElementById("gameover-screen").classList.add("hidden");
+  document.getElementById("title-screen").classList.remove("hidden");
+  state.modo = "titulo";
+});
+document.getElementById("btn-creditos").addEventListener("click", () => {
+  document.getElementById("title-screen").classList.add("hidden");
+  document.getElementById("credits-screen").classList.remove("hidden");
+});
+document.getElementById("btn-volver").addEventListener("click", () => {
+  document.getElementById("credits-screen").classList.add("hidden");
+  document.getElementById("title-screen").classList.remove("hidden");
+});
+
+/* ============================================================
+   BUCLE PRINCIPAL
+   ============================================================ */
+const reloj = new THREE.Clock();
+let tiempoTotal = 0;
+
+function animar() {
+  requestAnimationFrame(animar);
+  let dt = reloj.getDelta();
+  if (dt > 0.05) dt = 0.05; // evita saltos si la pestaña pierde foco
+
+  if (state.modo === "jugando") {
+    tiempoTotal += dt;
+    actualizarRotacion(dt);
+    actualizarMovimiento(dt);
+    actualizarAcoplamiento(dt);
+    actualizarTrafico(dt, tiempoTotal);
+    actualizarEstaciones(dt, tiempoTotal);
+    actualizarTransicion(dt);
+    actualizarHUD(dt);
+  } else if (state.modo === "pausa") {
+    actualizarEstaciones(0, tiempoTotal);
+  }
+
+  renderer.render(scene, camera);
+}
+animar();
+</script>
+</body>
+</html>
